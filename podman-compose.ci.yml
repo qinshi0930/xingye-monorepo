@@ -34,6 +34,7 @@ services:
         condition: service_healthy
     command: >
       sh -c "npm install -g pnpm &&
+             pnpm config set store-dir /tmp/pnpm-store &&
              pnpm install --frozen-lockfile &&
              echo '=== [1/6] 代码检查 (lint) ===' &&
              pnpm lint &&
