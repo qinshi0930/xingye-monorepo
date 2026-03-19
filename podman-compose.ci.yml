@@ -46,11 +46,6 @@ services:
              pnpm build &&
              echo '=== [5/6] 集成测试 ===' &&
              pnpm test:integration &&
-             echo '=== [6/6] 导出构建产物 ===' &&
-             mkdir -p /app/dist &&
-             cp -r /app/apps/web/.next /app/dist/ &&
-             cp -r /app/apps/web/public /app/dist/ &&
-             echo '构建产物已导出到 /app/dist' &&
              echo 'All checks passed!'"
     networks:
       - ci-network

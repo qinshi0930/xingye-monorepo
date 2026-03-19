@@ -41,4 +41,16 @@ if (process.env.NODE_ENV !== 'production') {
   globalThis.redis = redis;
 }
 
+/**
+ * 关闭 Redis 连接并清理全局引用
+ * 用于测试环境和进程退出时确保资源正确释放
+ */
+export async function close(): Promise<void> {
+  await redis.quit();
+  // 清理全局引用，确保 Jest 可以正常退出
+  if (globalThis.redis) {
+    globalThis.redis = undefined;
+  }
+}
+
 export default redis;

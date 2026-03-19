@@ -1,5 +1,5 @@
 import * as cache from '@/lib/cache';
-import { redis } from '@/lib/cache';
+import { close as closeRedis } from '@/lib/cache';
 import { CACHE_TTL, buildCacheKey, buildListCacheKey } from '@/lib/cache';
 
 describe('Redis Cache Operations', () => {
@@ -13,8 +13,8 @@ describe('Redis Cache Operations', () => {
   afterAll(async () => {
     // 清理所有测试缓存
     await cache.clear('test:*');
-    // 关闭Redis连接，确保Jest能够正常退出
-    await redis.quit();
+    // 关闭Redis连接并清理全局引用，确保Jest能够正常退出
+    await closeRedis();
   });
 
   describe('Basic Operations', () => {

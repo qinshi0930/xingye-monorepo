@@ -79,21 +79,29 @@ manage_logs() {
 destroy_ci_containers() {
     info "强制销毁 CI 容器..."
 
+    # 首先停止所有正在运行的 CI 容器（防止服务容器持续运行）
+    local containers=("xingye-ci-validator" "xingye-ci-redis" "xingye-ci-postgres")
+    for container in "${containers[@]}"; do
+        if podman ps -q -f "name=$container" | grep -q .; then
+            info "  停止运行中的容器: $container"
+            podman stop "$container" 2>/dev/null || true
+        fi
+    done
+
     # 停止并删除 compose 管理的容器
     cd "$PROJECT_ROOT"
     podman-compose -f podman-compose.ci.yml down -v --remove-orphans 2>/dev/null || true
 
-    # 强制删除可能残留的容器（包括验证容器）
-    local containers=("xingye-ci-validator" "xingye-ci-redis" "xingye-ci-postgres")
+    # 强制删除可能残留的容器
     for container in "${containers[@]}"; do
         if podman ps -a -q -f "name=$container" | grep -q .; then
             info "  销毁容器: $container"
-            podman stop "$container" 2>/dev/null || true
             podman rm -f "$container" 2>/dev/null || true
         fi
     done
 
     # 清理未使用的网络
+    podman network rm xingye-monorepo_ci-network 2>/dev/null || true
     podman network rm ci-network 2>/dev/null || true
 
     success "CI 容器已销毁，系统资源已释放"
@@ -111,63 +119,30 @@ cleanup() {
     info "清理完成"
 }
 
-# 导出构建产物到宿主机
-export_build_artifacts() {
-    info "导出构建产物到宿主机..."
+# 验证构建产物（卷挂载已自动同步产物到宿主机）
+verify_build_artifacts() {
+    info "验证构建产物..."
 
-    # 创建宿主机 dist 目录
-    mkdir -p "$PROJECT_ROOT/dist"
-
-    # ============================================
-    # 当前: 仅导出 web 应用构建产物
-    # ============================================
-    # 从验证容器复制构建产物
-    if podman cp xingye-ci-validator:/app/dist/. "$PROJECT_ROOT/dist/" 2>/dev/null; then
-        success "构建产物已导出到: $PROJECT_ROOT/dist/"
-        # 显示导出内容
-        info "导出内容:"
-        ls -la "$PROJECT_ROOT/dist/" | tail -n +2 | while read line; do
-            info "  $line"
-        done
-    else
-        warn "无法从容器导出构建产物，尝试从本地 apps/web/.next 复制..."
-        if [ -d "$PROJECT_ROOT/apps/web/.next" ]; then
-            mkdir -p "$PROJECT_ROOT/dist/.next"
-            cp -r "$PROJECT_ROOT/apps/web/.next/standalone" "$PROJECT_ROOT/dist/.next/" 2>/dev/null || true
-            cp -r "$PROJECT_ROOT/apps/web/.next/static" "$PROJECT_ROOT/dist/.next/" 2>/dev/null || true
-            cp -r "$PROJECT_ROOT/apps/web/public" "$PROJECT_ROOT/dist/" 2>/dev/null || true
-            success "构建产物已从本地复制到: $PROJECT_ROOT/dist/"
-        else
-            error "未找到构建产物，部署可能失败"
-            return 1
-        fi
+    # 检查 dist 目录是否存在
+    if [ ! -d "$PROJECT_ROOT/dist" ]; then
+        error "构建产物目录不存在: $PROJECT_ROOT/dist"
+        return 1
     fi
 
-    # ============================================
-    # 多应用支持占位 - Admin 构建产物导出
-    # ============================================
-    # TODO: 当 admin 应用需要独立部署时，取消注释以下代码
-    # info "导出 admin 构建产物..."
-    # mkdir -p "$PROJECT_ROOT/dist/admin"
-    # if [ -d "$PROJECT_ROOT/apps/admin/.next" ]; then
-    #     cp -r "$PROJECT_ROOT/apps/admin/.next/standalone" "$PROJECT_ROOT/dist/admin/.next/" 2>/dev/null || true
-    #     cp -r "$PROJECT_ROOT/apps/admin/.next/static" "$PROJECT_ROOT/dist/admin/.next/" 2>/dev/null || true
-    #     cp -r "$PROJECT_ROOT/apps/admin/public" "$PROJECT_ROOT/dist/admin/" 2>/dev/null || true
-    #     success "admin 构建产物已导出"
-    # fi
+    # 检查是否有任何应用产物
+    local app_count
+    app_count=$(find "$PROJECT_ROOT/dist" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
 
-    # ============================================
-    # 多应用支持占位 - API 构建产物导出
-    # ============================================
-    # TODO: 当 api 应用需要独立部署时，取消注释以下代码
-    # info "导出 api 构建产物..."
-    # mkdir -p "$PROJECT_ROOT/dist/api"
-    # if [ -d "$PROJECT_ROOT/apps/api/.next" ]; then
-    #     cp -r "$PROJECT_ROOT/apps/api/.next/standalone" "$PROJECT_ROOT/dist/api/.next/" 2>/dev/null || true
-    #     cp -r "$PROJECT_ROOT/apps/api/.next/static" "$PROJECT_ROOT/dist/api/.next/" 2>/dev/null || true
-    #     cp -r "$PROJECT_ROOT/apps/api/public" "$PROJECT_ROOT/dist/api/" 2>/dev/null || true
-    #     success "api 构建产物已导出"
-    # fi
+    if [ "$app_count" -eq 0 ]; then
+        error "未找到任何应用构建产物"
+        return 1
+    fi
+
+    success "发现 $app_count 个应用构建产物"
+    info "构建产物内容:"
+    ls -la "$PROJECT_ROOT/dist/" 2>/dev/null | tail -n +2 | while read line; do
+        info "  $line"
+    done || true
 }
 
 # 主流程
@@ -194,7 +169,17 @@ main() {
     info "[验证] 启动验证容器..."
     echo ""
 
-    if podman-compose -f podman-compose.ci.yml up --abort-on-container-exit 2>&1 | tee -a "$LOG_FILE"; then
+    # 在后台启动 compose（服务容器持续运行，validator 执行验证后退出）
+    podman-compose -f podman-compose.ci.yml up -d 2>&1 | tee -a "$LOG_FILE"
+
+    # 等待 validator 容器完成（跟随日志直到容器退出）
+    info "等待验证容器执行完成..."
+    podman logs -f xingye-ci-validator 2>&1 | tee -a "$LOG_FILE"
+
+    # 获取 validator 容器的退出码
+    COMPOSE_EXIT_CODE=$(podman inspect xingye-ci-validator --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
+
+    if [ $COMPOSE_EXIT_CODE -eq 0 ]; then
         echo ""
         success "=========================================="
         success "        所有验证通过!"
@@ -208,16 +193,16 @@ main() {
         EXIT_CODE=1
     fi
 
-    # 4. 导出构建产物（仅在验证成功时）
+    # 4. 验证构建产物（卷挂载已自动同步产物到宿主机，仅需验证）
     if [ $EXIT_CODE -eq 0 ]; then
-        export_build_artifacts || true
+        verify_build_artifacts 2>&1 | tee -a "$LOG_FILE" || true
     fi
 
     # 5. 收集日志
-    collect_logs
+    collect_logs 2>&1 | tee -a "$LOG_FILE" || true
 
     # 6. 清理环境
-    cleanup
+    cleanup 2>&1 | tee -a "$LOG_FILE" || true
 
     # 7. 输出结果
     echo ""

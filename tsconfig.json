@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./packages/config-typescript/base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@xingye/*": ["./packages/*/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist", ".next", "**/*.test.ts", "**/*.test.tsx"],
+  "references": [
+    { "path": "./packages/logger" },
+    { "path": "./packages/redis-core" }
+  ]
+}

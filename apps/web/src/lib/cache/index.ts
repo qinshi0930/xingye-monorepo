@@ -1,6 +1,6 @@
 // Web 应用缓存层统一导出
 
-export { redis } from './client';
+export { redis, close } from './client';
 export {
   CACHE_TTL,
   CACHE_PREFIX,
