@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -9,21 +9,24 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.pnpm-store/
 
 # testing
-/coverage
+**/coverage
 
 # next.js
-/.next/
-/out/
-/.next-export/
+**/.next/
+**/out/
+**/.next-export/
 
 # production
-/build
+**/build
+**/dist
 
 # misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # debug
 npm-debug.log*
@@ -33,6 +36,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!.env.template
 
 # vercel
 .vercel
@@ -44,15 +49,55 @@ next-env.d.ts
 # ai agent
 .qoder/
 
-# pnpm store
-.pnpm-store/
-
 # deploy logs
 /logs/
 *.log
 
+# build output
+dist/
+
+# local env files in apps
+apps/*/.env.local
+
+# drizzle migrations (generated)
+apps/*/drizzle/
+
+# test coverage
+.nyc_output
+
+# playwright e2e test
+playwright-report/
+test-results/
+
 # swc cache
 .swc/
+
+# turborepo
+.turbo/
+
+# editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# local database
+*.sqlite
+*.sqlite3
+*.db
+
+# infrastructure data (keep config files)
+# Redis: 保留配置文件，忽略运行时数据
+.infra-data/redis/appendonly.aof
+.infra-data/redis/dump.rdb
+!.infra-data/redis/redis.conf
+
+# PostgreSQL: 保留初始化脚本，忽略数据文件
+.infra-data/postgres/*
+!.infra-data/postgres/init/
+!.infra-data/postgres/init/*.sql
+!.infra-data/postgres/init/.gitkeep
 
 # project init scripts (should not be committed to child projects)
 /scripts/create-app.mjs

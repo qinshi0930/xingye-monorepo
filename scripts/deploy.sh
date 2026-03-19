@@ -1,16 +1,32 @@
 #!/bin/bash
-
-# 配置
+#
+# 部署脚本 - 负责生产环境部署（方案 B：使用 CI 预构建产物）
+# ========================================
+# 架构设计：
+# - 验证+构建：由 ci-validate.sh 统一处理（lint/type-check/test/build）
+# - 部署流程：由本脚本负责（检查产物/打包镜像/备份/部署/健康检查）
+#
+# 前置条件：必须先运行 ci-validate.sh 生成 dist/ 构建产物
+#
+# 使用方式: ./scripts/deploy.sh [environment] [--skip-validate]
+#   environment: 部署环境，默认为 production
+#   --skip-validate: 跳过 CI 验证（要求已存在 dist/ 构建产物）
+#
 DEPLOY_DIR="/var/www/xingye-monorepo"
 BACKUP_DIR="$DEPLOY_DIR/backups/$(date +%Y%m%d-%H%M%S)"
 CONTAINER_NAME="xingye-monorepo"
 IMAGE_NAME="xingye-monorepo:latest"
-BUILD_CONTAINER="cms-build-$$"
+BUILD_CONTAINER=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-mkdir -p "$PROJECT_DIR/logs"
-LOG_FILE="$PROJECT_DIR/logs/deploy-$(date +%Y%m%d-%H%M%S).log"
-HEALTH_URL="http://localhost:8080"
+LOG_DIR="$PROJECT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"
+HEALTH_URL="${HEALTH_URL:-http://localhost:8080}"
+
+# 参数解析
+ENVIRONMENT="${1:-production}"
+SKIP_VALIDATE="${2:-false}"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -93,6 +109,20 @@ rollback() {
     fi
 }
 
+# 日志管理：仅保留最近的5个日志文件
+manage_logs() {
+    local max_logs=5
+    local log_count
+
+    log_count=$(ls -1 "$LOG_DIR"/deploy-*.log 2>/dev/null | wc -l)
+
+    if [ "$log_count" -gt "$max_logs" ]; then
+        log "日志管理: 保留最近 $max_logs 个部署日志文件，删除旧的..."
+        ls -1t "$LOG_DIR"/deploy-*.log | tail -n +$((max_logs + 1)) | xargs -r rm -f
+        log "日志管理: 已清理旧日志文件"
+    fi
+}
+
 # 清理函数
 cleanup() {
     log "清理临时资源..."
@@ -103,109 +133,130 @@ cleanup() {
     log "清理完成"
 }
 
+# 检查 CI 构建产物是否存在
+check_build_artifacts() {
+    if [ ! -d "$PROJECT_DIR/dist/.next/standalone" ]; then
+        log "${YELLOW}警告: 未找到 CI 构建产物 (dist/.next/standalone)${NC}"
+        log "请先运行 CI 验证: ./scripts/ci-validate.sh"
+        return 1
+    fi
+    return 0
+}
+
 # 主流程
 main() {
     log "=== 开始部署 ==="
-    
-    # 1. 构建镜像（测试在构建阶段运行，使用 Mock）
-    log "步骤 1/9: 构建镜像..."
+    log "环境: $ENVIRONMENT"
+    log "跳过验证: $SKIP_VALIDATE"
+
+    # 0. 日志管理（仅保留最近5个日志文件）
+    manage_logs
+
+    # 1. CI 验证阶段（验证流程由 ci-validate.sh 统一处理，包含构建）
+    if [ "$SKIP_VALIDATE" != "true" ]; then
+        log "步骤 1/6: 执行 CI 验证（包含构建）..."
+        if [ -f "$SCRIPT_DIR/ci-validate.sh" ]; then
+            if ! "$SCRIPT_DIR/ci-validate.sh"; then
+                error_exit "CI 验证失败，终止部署"
+            fi
+        else
+            log "${YELLOW}警告: ci-validate.sh 不存在，跳过验证${NC}"
+        fi
+    else
+        log "${YELLOW}跳过 CI 验证${NC}"
+    fi
+
+    # 2. 检查构建产物
+    log "步骤 2/6: 检查 CI 构建产物..."
+    if ! check_build_artifacts; then
+        if [ "$SKIP_VALIDATE" = "true" ]; then
+            error_exit "跳过验证但未找到构建产物，无法部署"
+        else
+            error_exit "CI 验证后未找到构建产物"
+        fi
+    fi
+    log "构建产物检查通过"
+
+    # 3. 构建生产镜像（使用 CI 预构建产物，仅打包）
+    log "步骤 3/6: 构建生产镜像（使用 CI 预构建产物）..."
     run_cmd "podman build -t '$IMAGE_NAME' ." "构建镜像 $IMAGE_NAME" || error_exit "镜像构建失败"
-    
-    # 2. 导出构建产物
-    log "步骤 2/9: 导出构建产物..."
-    run_cmd "podman create --name '$BUILD_CONTAINER' '$IMAGE_NAME'" "创建临时容器"
-    mkdir -p ./.next-export
-    run_cmd "podman cp '$BUILD_CONTAINER:/app/.next' ./.next-export/" "复制 .next 目录"
-    run_cmd "podman cp '$BUILD_CONTAINER:/app/public' ./.next-export/" "复制 public 目录"
-    run_cmd "podman rm '$BUILD_CONTAINER'" "删除临时容器"
-    BUILD_CONTAINER=""
-    
-    # 3. 备份当前部署
-    log "步骤 3/9: 备份当前部署..."
+
+    # 4. 备份当前部署
+    log "步骤 4/6: 备份当前部署..."
     backup
-    
-    # 4. 复制到部署路径
-    log "步骤 4/9: 复制到部署路径 $DEPLOY_DIR..."
+
+    # 5. 复制到部署路径
+    log "步骤 5/6: 复制到部署路径 $DEPLOY_DIR..."
     mkdir -p "$DEPLOY_DIR"
-    run_cmd "cp -r ./.next-export/.next '$DEPLOY_DIR/'" "复制 .next 到部署目录"
-    run_cmd "cp -r ./.next-export/public '$DEPLOY_DIR/'" "复制 public 到部署目录"
+    run_cmd "cp -r '$PROJECT_DIR/dist/.next' '$DEPLOY_DIR/'" "复制 .next 到部署目录"
+    run_cmd "cp -r '$PROJECT_DIR/dist/public' '$DEPLOY_DIR/'" "复制 public 到部署目录"
     run_cmd "cp package.json pnpm-lock.yaml '$DEPLOY_DIR/'" "复制配置文件"
-    
-    # 5. 复制生产配置文件
-    log "步骤 5/9: 复制生产配置文件..."
     run_cmd "cp podman-compose.yml '$DEPLOY_DIR/'" "复制 podman-compose.yml"
     run_cmd "cp -r config '$DEPLOY_DIR/'" "复制 config 目录"
     run_cmd "cp .env '$DEPLOY_DIR/'" "复制 .env 文件"
-    
-    # 6. 停止旧容器
-    log "步骤 6/9: 停止旧容器..."
+
+    # 6. 停止旧容器并启动新容器
+    log "步骤 6/6: 停止旧容器并启动新容器..."
     cd "$DEPLOY_DIR"
     run_cmd "podman-compose -f podman-compose.yml down" "停止旧容器" || true
     log "旧容器已停止"
-    
-    # 7. 启动新容器（使用生产配置）
-    log "步骤 7/9: 启动新容器..."
-    cd "$DEPLOY_DIR"
     run_cmd "podman-compose -f podman-compose.yml up -d" "启动新容器" || error_exit "容器启动失败"
-    
-    # 8. 健康检查
-    log "步骤 8/9: 健康检查..."
-    
-    # 加载环境变量
+
+    # 加载环境变量并健康检查
     if [ -f "$DEPLOY_DIR/.env" ]; then
         export $(grep -v '^#' "$DEPLOY_DIR/.env" | xargs)
     fi
-    
-    # 8.1 检查 PostgreSQL
-    log "检查 PostgreSQL 状态..."
+
+    # 健康检查
+    log "执行健康检查..."
+
+    # 检查 PostgreSQL
+    log "  检查 PostgreSQL 状态..."
     for i in {1..30}; do
-        if podman exec xingye-monorepo-postgres pg_isready -U "${POSTGRES_USER:-postgres}" > /dev/null 2>&1; then
-            log "${GREEN}PostgreSQL 就绪${NC}"
+        if podman exec xingye-monorepo-postgres pg_isready -U "${POSTGRES_USER:-xingye}" > /dev/null 2>&1; then
+            log "  ${GREEN}PostgreSQL 就绪${NC}"
             break
         fi
         if [ $i -eq 30 ]; then
-            log "${YELLOW}警告: PostgreSQL 健康检查超时${NC}"
+            log "  ${YELLOW}警告: PostgreSQL 健康检查超时${NC}"
         else
-            log "等待 PostgreSQL 启动... ($i/30)"
+            log "  等待 PostgreSQL 启动... ($i/30)"
             sleep 2
         fi
     done
-    
-    # 8.2 检查 Redis
-    log "检查 Redis 状态..."
+
+    # 检查 Redis
+    log "  检查 Redis 状态..."
     REDIS_PWD="${REDIS_PASSWORD:-}"
     for i in {1..10}; do
         if podman exec xingye-monorepo-redis redis-cli -a "$REDIS_PWD" ping 2>/dev/null | grep -q "PONG"; then
-            log "${GREEN}Redis 就绪${NC}"
+            log "  ${GREEN}Redis 就绪${NC}"
             break
         fi
         if [ $i -eq 10 ]; then
-            log "${YELLOW}警告: Redis 健康检查超时${NC}"
+            log "  ${YELLOW}警告: Redis 健康检查超时${NC}"
         else
-            log "等待 Redis 启动... ($i/10)"
+            log "  等待 Redis 启动... ($i/10)"
             sleep 1
         fi
     done
-    
-    # 8.3 检查应用 HTTP 健康
+
+    # 检查应用 HTTP 健康
+    log "  检查应用 HTTP 健康..."
     sleep 3
     for i in {1..10}; do
         if curl -sf "$HEALTH_URL" > /dev/null; then
-            log "${GREEN}应用健康检查通过${NC}"
+            log "  ${GREEN}应用健康检查通过${NC}"
             break
         fi
-        log "等待应用服务启动... ($i/10)"
+        log "  等待应用服务启动... ($i/10)"
         sleep 2
     done
-    
+
     if ! curl -sf "$HEALTH_URL" > /dev/null; then
         error_exit "应用健康检查失败"
     fi
-    
-    # 9. 清理临时文件
-    log "清理临时文件..."
-    cleanup
-    
+
     log "${GREEN}=== 部署成功 ===${NC}"
     log "访问: $HEALTH_URL"
     log "停止: sudo podman-compose -f $DEPLOY_DIR/podman-compose.yml down"

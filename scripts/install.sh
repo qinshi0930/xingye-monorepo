@@ -7,7 +7,7 @@
 
 set -e
 
-REPO_URL="https://github.com/qinshi0930/next-fullstack-template.git"
+REPO_URL="https://github.com/qinshi0930/xingye-monorepo.git"
 DEFAULT_PROJECT_NAME="my-app"
 
 # 颜色输出
@@ -153,20 +153,20 @@ rm -rf .git
 
 # 更新项目名称
 log "配置项目名称..."
-sed -i.bak "s/\"name\": \"next-fullstack-template\"/\"name\": \"$PROJECT_NAME\"/" package.json && rm -f package.json.bak
+sed -i.bak "s/\"name\": \"xingye-monorepo\"/\"name\": \"$PROJECT_NAME\"/" package.json && rm -f package.json.bak
 
 # 更新容器名称
 if [[ -f "podman-compose.yml" ]]; then
-    sed -i.bak "s/next-fullstack-template/$PROJECT_NAME/g" podman-compose.yml && rm -f podman-compose.yml.bak
-    sed -i.bak "s/next-fullstack-redis/$PROJECT_NAME-redis/g" podman-compose.yml && rm -f podman-compose.yml.bak
-    sed -i.bak "s/next-fullstack-postgres/$PROJECT_NAME-postgres/g" podman-compose.yml && rm -f podman-compose.yml.bak
-    sed -i.bak "s/next-fullstack-nginx/$PROJECT_NAME-nginx/g" podman-compose.yml && rm -f podman-compose.yml.bak
+    sed -i.bak "s/xingye-monorepo/$PROJECT_NAME/g" podman-compose.yml && rm -f podman-compose.yml.bak
+    sed -i.bak "s/xingye-redis/$PROJECT_NAME-redis/g" podman-compose.yml && rm -f podman-compose.yml.bak
+    sed -i.bak "s/xingye-postgres/$PROJECT_NAME-postgres/g" podman-compose.yml && rm -f podman-compose.yml.bak
+    sed -i.bak "s/xingye-nginx/$PROJECT_NAME-nginx/g" podman-compose.yml && rm -f podman-compose.yml.bak
 fi
 
 if [[ -f "scripts/deploy.sh" ]]; then
-    sed -i.bak "s/next-fullstack-template/$PROJECT_NAME/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
-    sed -i.bak "s/next-fullstack-redis/$PROJECT_NAME-redis/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
-    sed -i.bak "s/next-fullstack-postgres/$PROJECT_NAME-postgres/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
+    sed -i.bak "s/xingye-monorepo/$PROJECT_NAME/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
+    sed -i.bak "s/xingye-redis/$PROJECT_NAME-redis/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
+    sed -i.bak "s/xingye-postgres/$PROJECT_NAME-postgres/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
 fi
 
 # 生成环境变量
@@ -245,23 +245,28 @@ echo -e "${BOLD}下一步操作:${NC}
 
   ${CYAN}cd $PROJECT_NAME${NC}
 
-  1. 启动开发环境（数据库服务）:
-     ${CYAN}podman-compose -f podman-compose.dev.yml up -d${NC}
+  1. 初始化环境变量:
+     ${CYAN}./scripts/init-env.sh${NC}
 
-  2. 生成并推送数据库迁移:
+  2. 启动基础设施（数据库/缓存）:
+     ${CYAN}pnpm infra:up${NC}
+
+  3. 生成并推送数据库迁移:
      ${CYAN}pnpm db:generate${NC}
      ${CYAN}pnpm db:push${NC}
 
-  3. 启动开发服务器:
-     ${CYAN}pnpm dev${NC}
+  4. 启动开发服务器:
+     ${CYAN}pnpm dev:all${NC}
 
-  4. 访问应用:
-     ${CYAN}http://localhost:3000${NC}
+  5. 访问应用:
+     ${CYAN}http://localhost:3000${NC} (web)
+     ${CYAN}http://localhost:3001${NC} (admin)
+     ${CYAN}http://localhost:3002${NC} (api)
 
 ${BOLD}生产部署:${NC}
 
   运行部署脚本:
-     ${CYAN}bash scripts/deploy.sh${NC}
+     ${CYAN}pnpm deploy:prod${NC}
 
 ${BOLD}文档:${NC}
 

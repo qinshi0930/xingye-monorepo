@@ -1,0 +1,52 @@
+version: '3.8'
+
+# 基础设施配置 - 仅包含 PostgreSQL 和 Redis
+# 用于本地开发：应用在 IDE 中运行，连接容器化基础设施
+# 数据持久化到 .infra-data 目录
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: xingye-infra-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123} --appendonly yes
+    volumes:
+      - ./.infra-data/redis:/data
+      - ./.infra-data/redis/redis.conf:/etc/redis/redis.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - infra-network
+
+  postgres:
+    image: postgres:alpine
+    container_name: xingye-infra-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres123}
+      - POSTGRES_DB=${POSTGRES_DB:-master_db}
+      - POSTGRES_USER=${POSTGRES_USER:-xingye}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./.infra-data/postgres:/var/lib/postgresql/data
+      - ./.infra-data/postgres/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xingye} -d ${POSTGRES_DB:-master_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - infra-network
+
+networks:
+  infra-network:
+    driver: bridge

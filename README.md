@@ -1,6 +1,14 @@
-# Next.js 全栈开发模板
+# Xingye Monorepo
 
-一个现代化、生产就绪的全栈应用开发模板，基于 Next.js 16 + React 19 + TypeScript，集成 PostgreSQL 数据库和 Redis 缓存层。
+一个现代化、生产就绪的 Monorepo 全栈应用开发模板，基于 Next.js 16 + React 19 + TypeScript，采用 pnpm workspaces 管理多应用，集成 PostgreSQL 数据库和 Redis 缓存层。
+
+> **模板定位**：这是一个**基础架构模板**，提供开箱即用的基础设施（数据库、缓存、CI/CD、容器化），开发者可基于此快速构建业务应用。
+>
+> - ✅ 完整的基础设施（DB、缓存、容器化、CI/CD）
+> - ✅ 标准化的 Monorepo 结构
+> - ⬜ 业务页面（需自行开发）
+> - ⬜ 认证系统（建议集成 NextAuth/Lucia）
+> - ⬜ admin/api 应用（预留占位，需自行实现）
 
 ## 技术栈
 
@@ -17,54 +25,71 @@
 
 ```
 .
-├── src/
-│   ├── app/              # Next.js App Router
-│   ├── components/       # React 组件
-│   │   └── ui/          # shadcn/ui 组件
-│   ├── lib/
-│   │   ├── db/          # 数据库层 (Drizzle ORM)
-│   │   │   ├── schema.ts    # 数据库表定义
-│   │   │   ├── crud.ts      # CRUD 操作 (带缓存)
-│   │   │   └── index.ts     # 数据库连接
-│   │   ├── redis/       # 缓存层 (Redis 封装)
-│   │   │   ├── index.ts         # Redis 客户端
-│   │   │   ├── cache.ts         # 缓存操作
-│   │   │   ├── cache-wrapper.ts # 缓存装饰器
-│   │   │   ├── config.ts        # 缓存配置
-│   │   │   └── health.ts        # 健康检查
-│   │   ├── logger/      # 日志模块 (Pino)
-│   │   │   └── index.ts     # 日志配置
-│   │   └── utils.ts     # 工具函数
-│   └── __tests__/       # 测试文件
-│       ├── unit/        # 单元测试
-│       └── integration/ # 集成测试
-├── config/nginx/        # Nginx 配置
-├── drizzle/             # 数据库迁移文件
-├── scripts/             # 部署脚本
-├── docs/                # 项目文档
-├── Dockerfile           # 生产镜像
-├── podman-compose.yml   # 生产环境编排
-└── podman-compose.dev.yml # 开发环境编排
+├── apps/
+│   ├── web/              # Web 主应用 (Next.js)
+│   ├── admin/            # 管理后台 (预留)
+│   └── api/              # API 服务 (预留)
+├── packages/
+│   ├── config-eslint/    # ESLint 共享配置
+│   ├── config-typescript/# TypeScript 共享配置
+│   ├── logger/           # 日志模块 (Pino)
+│   └── redis-core/       # Redis 缓存封装
+├── config/nginx/         # Nginx 配置
+├── scripts/              # 部署脚本
+│   ├── init-env.sh       # 初始化环境变量
+│   ├── install.sh        # 项目安装脚本
+│   ├── ci-validate.sh    # CI 验证脚本
+│   ├── deploy.sh         # 生产部署脚本
+│   └── build-apps.sh     # 多应用构建脚本
+├── docs/                 # 项目文档
+├── Dockerfile            # 生产镜像
+├── podman-compose.yml              # 生产环境编排
+├── podman-compose.infra.yml        # 基础设施编排 (开发)
+├── podman-compose.ci.yml           # CI 验证环境编排
+└── pnpm-workspace.yaml   # pnpm 工作区配置
 ```
 
 ## 快速开始
 
-### 1. 环境准备
+### 使用此模板后的第一步
+
+```bash
+# 1. 初始化环境变量
+./scripts/init-env.sh
+
+# 2. 启动基础设施（PostgreSQL + Redis）
+pnpm infra:up
+
+# 3. 初始化数据库
+pnpm db:generate
+pnpm db:push
+
+# 4. 启动开发服务器
+pnpm dev:web
+
+# 5. 访问 http://localhost:3000
+```
+
+---
+
+### 详细步骤
+
+#### 1. 环境准备
 
 确保已安装：
 - [Node.js 20+](https://nodejs.org/)
-- [pnpm](https://pnpm.io/installation)
+- [pnpm 10+](https://pnpm.io/installation)
 - [Podman](https://podman.io/getting-started/installation) 或 Docker
 
-### 2. 初始化项目
+#### 2. 初始化项目
 
 #### 方式一：使用安装脚本（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/qinshi0930/xingye-monorepo/main/scripts/install.sh | bash
 
 # 或指定项目名称
-curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/main/scripts/install.sh | bash -s -- my-project
+curl -fsSL https://raw.githubusercontent.com/qinshi0930/xingye-monorepo/main/scripts/install.sh | bash -s -- my-project
 ```
 
 安装脚本会自动完成：克隆模板、重命名项目、生成环境变量、初始化 git、安装依赖。
@@ -73,30 +98,33 @@ curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/
 
 ```bash
 # 克隆项目
-git clone <repository-url>
-cd next-fullstack-template
+git clone https://github.com/qinshi0930/xingye-monorepo.git
+cd xingye-monorepo
 
 # 安装依赖
 pnpm install
 
 # 初始化环境变量
-pnpm init:env
+./scripts/init-env.sh
 ```
 
 ### 3. 启动开发环境
 
 ```bash
-# 启动所有服务 (App + PostgreSQL + Redis)
-podman-compose -f podman-compose.dev.yml up -d
+# 启动基础设施 (PostgreSQL + Redis)
+pnpm infra:up
 
-# 或仅启动数据库服务
-podman-compose -f podman-compose.dev.yml up -d redis postgres
+# 或手动启动
+podman-compose -f podman-compose.infra.yml up -d
 
-# 本地启动 Next.js 开发服务器
-pnpm dev
+# 本地启动 Web 应用开发服务器
+pnpm dev:web
+
+# 或启动所有应用
+pnpm dev:all
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3000 (web) | http://localhost:3001 (admin) | http://localhost:3002 (api)
 
 ### 4. 数据库迁移
 
@@ -115,15 +143,19 @@ pnpm db:studio
 
 ```bash
 # 开发
-pnpm dev              # 启动开发服务器
-pnpm build            # 构建生产版本
-pnpm start            # 启动生产服务器
+pnpm dev              # 启动 web 开发服务器
+pnpm dev:web          # 启动 web 开发服务器
+pnpm dev:admin        # 启动 admin 开发服务器
+pnpm dev:api          # 启动 api 开发服务器
+pnpm dev:all          # 启动所有应用
+pnpm build            # 构建所有应用
 pnpm lint             # 运行 ESLint
+pnpm type-check       # 运行 TypeScript 类型检查
 
 # 测试
 pnpm test             # 运行所有测试
-pnpm test:watch       # 监听模式运行测试
-pnpm test:coverage    # 生成测试覆盖率报告
+pnpm test:unit        # 运行单元测试
+pnpm test:integration # 运行集成测试
 
 # 数据库
 pnpm db:generate      # 生成 Drizzle 迁移
@@ -131,8 +163,16 @@ pnpm db:migrate       # 执行数据库迁移
 pnpm db:push          # 推送 schema 到数据库
 pnpm db:studio        # 启动 Drizzle Studio
 
-# 部署
-./scripts/deploy.sh   # 执行生产部署
+# 基础设施
+pnpm infra:up         # 启动基础设施容器
+pnpm infra:down       # 停止基础设施容器
+pnpm infra:logs       # 查看基础设施日志
+pnpm infra:reset      # 重置基础设施数据
+
+# CI/CD
+pnpm validate         # 运行 CI 验证 (lint + type-check + test + build)
+pnpm ci:validate      # 在容器环境中运行完整 CI 验证
+pnpm deploy:prod      # 执行生产部署
 ```
 
 ## 核心特性

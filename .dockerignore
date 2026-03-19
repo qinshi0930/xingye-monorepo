@@ -37,3 +37,36 @@ README.md
 
 # deploy
 scripts/deploy.sh
+
+# local env files
+apps/*/.env.local
+
+# drizzle
+**/drizzle/
+
+# test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/jest.config.*
+**/jest.setup.*
+
+# eslint config
+**/eslint.config.*
+
+# typescript config (build后不需要)
+**/tsconfig.json
+
+# local build output
+dist/
+
+# logs
+logs/
+
+# ai agent
+.qoder/
+
+# playwright
+playwright-report/
+test-results/

@@ -1,15 +1,24 @@
 version: '3.8'
 
 services:
-  app:
-    image: xingye-monorepo:latest
-    container_name: xingye-monorepo
+  # Web 主应用
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      args:
+        APP_NAME: web
+    image: xingye-web:latest
+    container_name: xingye-web
     expose:
       - "3000"
     env_file:
       - .env
+      - apps/web/.env.local
     environment:
       - NODE_ENV=production
+      - PORT=3000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
@@ -23,9 +32,59 @@ services:
     networks:
       - app-network
 
+  # Admin 管理后台 (预留)
+  # admin:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: admin
+  #     args:
+  #       APP_NAME: admin
+  #   image: xingye-admin:latest
+  #   container_name: xingye-admin
+  #   expose:
+  #     - "3000"
+  #   env_file:
+  #     - .env
+  #     - apps/admin/.env.local
+  #   environment:
+  #     - NODE_ENV=production
+  #     - PORT=3000
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - redis
+  #     - postgres
+  #   networks:
+  #     - app-network
+
+  # API 服务 (预留)
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: api
+  #     args:
+  #       APP_NAME: api
+  #   image: xingye-api:latest
+  #   container_name: xingye-api
+  #   expose:
+  #     - "3000"
+  #   env_file:
+  #     - .env
+  #     - apps/api/.env.local
+  #   environment:
+  #     - NODE_ENV=production
+  #     - PORT=3000
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - redis
+  #     - postgres
+  #   networks:
+  #     - app-network
+
   redis:
     image: redis:alpine
-    container_name: xingye-monorepo-redis
+    container_name: xingye-redis
     command: redis-server --requirepass ${REDIS_PASSWORD}
     expose:
       - "6379"
@@ -45,7 +104,7 @@ services:
 
   postgres:
     image: postgres:alpine
-    container_name: xingye-monorepo-postgres
+    container_name: xingye-postgres
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -56,7 +115,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-mydb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -68,7 +127,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: xingye-monorepo-nginx
+    container_name: xingye-nginx
     ports:
       - "8080:80"
       - "8443:443"
@@ -77,7 +136,9 @@ services:
       - ./config/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./config/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
-      - app
+      - web
+      # - admin
+      # - api
     restart: unless-stopped
     networks:
       - app-network

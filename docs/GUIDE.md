@@ -35,32 +35,27 @@
 ### 2.1 目录结构规范
 
 ```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/               # API 路由 (待实现)
-│   ├── (routes)/          # 页面路由组
-│   ├── layout.tsx         # 根布局
-│   ├── page.tsx           # 首页
-│   └── globals.css        # 全局样式
-├── components/            # React 组件
-│   └── ui/               # shadcn/ui 组件
-├── lib/                   # 基础设施层
-│   ├── db/               # 数据库层
-│   │   ├── schema.ts     # 表定义 (已定义 users, posts, categories)
-│   │   ├── crud.ts       # CRUD 操作 (已集成缓存)
-│   │   └── index.ts      # 数据库连接
-│   ├── redis/            # 缓存层
-│   │   ├── index.ts      # Redis 客户端
-│   │   ├── cache.ts      # 基础缓存操作
-│   │   ├── cache-wrapper.ts  # 缓存装饰器
-│   │   ├── config.ts     # 缓存配置
-│   │   └── health.ts     # 健康检查
-│   ├── logger/           # 日志模块
-│   │   └── index.ts      # Pino 日志配置
-│   └── utils.ts          # 工具函数
-└── __tests__/            # 测试文件
-    ├── unit/             # 单元测试
-    └── integration/      # 集成测试
+├── apps/                       # 应用目录 (Monorepo)
+│   ├── web/                   # Web 主应用 (Next.js)
+│   │   ├── app/              # Next.js App Router
+│   │   ├── components/       # React 组件
+│   │   ├── lib/              # 应用内工具
+│   │   └── package.json      # 应用依赖
+│   ├── admin/                # 管理后台 (预留)
+│   └── api/                  # API 服务 (预留)
+├── packages/                   # 共享包
+│   ├── config-eslint/        # ESLint 共享配置
+│   ├── config-typescript/    # TypeScript 共享配置
+│   ├── logger/               # 日志模块 (Pino)
+│   └── redis-core/           # Redis 缓存封装
+├── scripts/                    # 部署脚本
+│   ├── init-env.sh           # 初始化环境变量
+│   ├── install.sh            # 项目安装脚本
+│   ├── ci-validate.sh        # CI 验证脚本
+│   ├── deploy.sh             # 生产部署脚本
+│   └── build-apps.sh         # 多应用构建脚本
+├── config/nginx/               # Nginx 配置
+└── docs/                       # 项目文档
 ```
 
 ### 2.2 分层调用规则
@@ -388,10 +383,10 @@ describe('Feature Name', () => {
 
 ```bash
 # 使用默认项目名称 (my-app)
-curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/qinshi0930/xingye-monorepo/main/scripts/install.sh | bash
 
 # 指定项目名称
-curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/main/scripts/install.sh | bash -s -- my-project
+curl -fsSL https://raw.githubusercontent.com/qinshi0930/xingye-monorepo/main/scripts/install.sh | bash -s -- my-project
 
 # 跳过依赖安装（适合 CI 环境）
 curl -fsSL .../install.sh | bash -s -- my-project --skip-install
@@ -407,7 +402,20 @@ curl -fsSL .../install.sh | bash -s -- my-project --skip-git
 - 初始化本地 git 仓库
 - 安装项目依赖（pnpm 优先）
 
-### 8.2 环境变量
+### 8.2 环境变量初始化
+
+```bash
+# 使用 init-env.sh 脚本初始化环境变量
+./scripts/init-env.sh
+```
+
+脚本会自动：
+- 检查 `.env` 文件是否存在
+- 生成随机的 `REDIS_PASSWORD` 和 `POSTGRES_PASSWORD`
+- 根据 PostgreSQL 配置自动生成 `DATABASE_URL`
+- 密码更新时会自动重新生成 DATABASE_URL
+
+### 8.3 环境变量
 
 开发环境 (.env):
 ```bash
@@ -427,11 +435,19 @@ REDIS_PORT=6379
 REDIS_PASSWORD=
 ```
 
-### 8.2 容器环境
+### 8.4 容器环境
 
-开发环境使用 `podman-compose.dev.yml`，自动配置网络别名：
+开发环境使用 `podman-compose.infra.yml`，自动配置网络别名：
 - `postgres` → PostgreSQL 容器
 - `redis` → Redis 容器
+
+**可用命令：**
+```bash
+pnpm infra:up     # 启动基础设施
+pnpm infra:down   # 停止基础设施
+pnpm infra:logs   # 查看日志
+pnpm infra:reset  # 重置数据（谨慎使用）
+```
 
 ---
 
@@ -440,17 +456,25 @@ REDIS_PASSWORD=
 ### 9.1 生产部署
 
 ```bash
-# 执行部署脚本
-./scripts/deploy.sh
+# 执行部署脚本（完整流程：CI验证 → 构建 → 部署）
+pnpm deploy:prod
+
+# 或使用脚本
+./scripts/deploy.sh production
+
+# 跳过 CI 验证（仅当已运行过验证时）
+./scripts/deploy.sh production --skip-validate
 ```
 
 部署脚本会：
-1. 构建生产镜像
-2. 运行单元测试
-3. 备份当前部署
-4. 启动新容器
-5. 执行健康检查 (PostgreSQL + Redis + HTTP)
-6. 失败自动回滚
+1. 执行 CI 验证（lint + type-check + test + build）
+2. 检查 CI 构建产物
+3. 构建生产镜像
+4. 备份当前部署
+5. 复制构建产物到部署目录
+6. 启动新容器
+7. 执行健康检查 (PostgreSQL + Redis + HTTP)
+8. 失败自动回滚
 
 ### 9.2 部署特性
 
@@ -515,31 +539,44 @@ REDIS_PASSWORD=
 
 ```bash
 # 项目初始化
-curl -fsSL https://raw.githubusercontent.com/qinshi0930/next-fullstack-template/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/qinshi0930/xingye-monorepo/main/scripts/install.sh | bash
 
 # 开发
-pnpm dev                    # 启动开发服务器
-pnpm build                  # 构建生产版本
+pnpm dev:web                # 启动 web 开发服务器
+pnpm dev:admin              # 启动 admin 开发服务器
+pnpm dev:api                # 启动 api 开发服务器
+pnpm dev:all                # 启动所有应用
+pnpm build                  # 构建所有应用
+pnpm lint                   # 运行 ESLint
+pnpm type-check             # 运行 TypeScript 类型检查
 
 # 数据库
 pnpm db:generate            # 生成迁移
 pnpm db:migrate             # 执行迁移
+pnpm db:push                # 推送 schema
 pnpm db:studio              # 数据库 GUI
 
 # 测试
 pnpm test                   # 运行所有测试
 pnpm test:unit              # 仅运行单元测试
 pnpm test:integration       # 仅运行集成测试
-pnpm test:watch             # 监听模式
-pnpm test:coverage          # 生成覆盖率报告
 
-# 部署
-./scripts/deploy.sh         # 生产部署
+# CI/CD
+pnpm validate               # 本地 CI 验证
+pnpm ci:validate            # 容器环境 CI 验证
+pnpm deploy:prod            # 生产部署
+
+# 基础设施
+pnpm infra:up               # 启动基础设施
+pnpm infra:down             # 停止基础设施
+pnpm infra:logs             # 查看基础设施日志
+pnpm infra:reset            # 重置基础设施数据
+
+# 脚本
 ./scripts/init-env.sh       # 初始化环境变量
-
-# 容器
-podman-compose -f podman-compose.dev.yml up -d    # 启动开发环境
-podman-compose -f podman-compose.dev.yml down     # 停止开发环境
+./scripts/ci-validate.sh    # CI 验证
+./scripts/deploy.sh         # 生产部署
+./scripts/build-apps.sh     # 多应用构建
 ```
 
 ### B. 项目链接
