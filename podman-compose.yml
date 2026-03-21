@@ -5,8 +5,8 @@ services:
   web:
     image: xingye-web:${IMAGE_VERSION:-latest}  # 通过环境变量指定版本，默认 latest
     container_name: xingye-web
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     env_file:
       - .env
       - apps/web/.env.local

@@ -200,15 +200,8 @@ main() {
     # 0. 日志管理（仅保留最近5个日志文件）
     manage_logs
     
-    # 1. 检查构建产物
-    log "步骤 1/5: 检查构建产物..."
-    if ! check_build_artifacts; then
-        error_exit "未找到构建产物，无法部署"
-    fi
-    log "构建产物检查通过"
-
-    # 2. 构建生产镜像（调用 build-apps.sh，带版本号）
-    log "步骤 2/5: 构建生产镜像..."
+    # 1. 构建生产镜像（调用 build-apps.sh，带版本号）
+    log "步骤 1/4: 构建生产镜像..."
     
     # 生成版本号（Git 短哈希 + 时间戳）
     VERSION=$(git rev-parse --short HEAD)-$(date +%Y%m%d-%H%M%S)
@@ -223,12 +216,12 @@ main() {
     podman tag xingye-web:latest "$IMAGE_TAG"
     log "镜像已标记: $IMAGE_TAG"
 
-    # 3. 备份当前部署
-    log "步骤 3/5: 备份当前部署..."
+    # 2. 备份当前部署
+    log "步骤 2/4: 备份当前部署..."
     backup
 
-    # 4. 复制配置文件到部署路径（纯镜像模式，不复制构建产物）
-    log "步骤 4/5: 复制配置文件到部署路径 $DEPLOY_DIR..."
+    # 3. 复制配置文件到部署路径（纯镜像模式，不复制构建产物）
+    log "步骤 3/4: 复制配置文件到部署路径 $DEPLOY_DIR..."
     mkdir -p "$DEPLOY_DIR"
     run_cmd "cp podman-compose.yml '$DEPLOY_DIR/'" "复制 podman-compose.yml"
     run_cmd "cp -r config '$DEPLOY_DIR/'" "复制 config 目录"
@@ -244,8 +237,8 @@ main() {
     echo "$VERSION" > "$DEPLOY_DIR/.version"
     log "版本号已保存到 .version"
 
-    # 5. 停止旧容器并启动新容器（使用版本号）
-    log "步骤 5/5: 停止旧容器并启动新容器..."
+    # 4. 停止旧容器并启动新容器（使用版本号）
+    log "步骤 4/4: 停止旧容器并启动新容器..."
     cd "$DEPLOY_DIR"
     
     # 导出 IMAGE_VERSION 供 podman-compose 使用
@@ -296,20 +289,20 @@ main() {
     done
 
     # 检查应用 HTTP 健康
-    # log "  检查应用 HTTP 健康..."
-    # sleep 5
-    # for i in {1..30}; do
-    #     if curl -sf "$HEALTH_URL" > /dev/null; then
-    #         log "  ${GREEN}应用健康检查通过${NC}"
-    #         break
-    #     fi
-    #     log "  等待应用服务启动... ($i/30)"
-    #     sleep 3
-    # done
+    log "  检查应用 HTTP 健康..."
+    sleep 5
+    for i in {1..30}; do
+        if curl -sf "$HEALTH_URL" > /dev/null; then
+            log "  ${GREEN}应用健康检查通过${NC}"
+            break
+        fi
+        log "  等待应用服务启动... ($i/30)"
+        sleep 3
+    done
 
-    # if ! curl -sf "$HEALTH_URL" > /dev/null; then
-    #     error_exit "应用健康检查失败"
-    # fi
+    if ! curl -sf "$HEALTH_URL" > /dev/null; then
+        error_exit "应用健康检查失败"
+    fi
 
     log "${GREEN}=== 部署成功 ===${NC}"
     log "访问: $HEALTH_URL"
