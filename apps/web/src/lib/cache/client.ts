@@ -43,11 +43,46 @@ if (process.env.NODE_ENV !== 'production') {
 
 /**
  * 关闭 Redis 连接并清理全局引用
- * 用于测试环境和进程退出时确保资源正确释放
+ * 
+ * @param force - 是否强制关闭。默认 false 使用 quit() 优雅关闭，
+ *                true 使用 disconnect() 强制关闭（测试环境推荐）
  */
-export async function close(): Promise<void> {
-  await redis.quit();
-  // 清理全局引用，确保 Jest 可以正常退出
+export async function close(force: boolean = false): Promise<void> {
+  // 如果连接已经关闭，直接清理引用
+  if (redis.status === 'end' || redis.status === 'close') {
+    if (globalThis.redis) {
+      globalThis.redis = undefined;
+    }
+    return;
+  }
+
+  // 使用 Promise 等待连接真正关闭
+  await new Promise<void>((resolve) => {
+    // 设置超时，避免永久等待
+    const timeout = setTimeout(() => {
+      redis.removeListener('end', onEnd);
+      resolve();
+    }, 1000);
+
+    // 监听 end 事件，确保连接真正关闭
+    const onEnd = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    
+    redis.once('end', onEnd);
+
+    // 执行关闭命令
+    if (force) {
+      redis.disconnect();
+    } else {
+      redis.quit().catch(() => {
+        // quit() 可能因连接已关闭而失败，忽略错误
+        onEnd();
+      });
+    }
+  });
+  
   if (globalThis.redis) {
     globalThis.redis = undefined;
   }

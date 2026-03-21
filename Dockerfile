@@ -1,5 +1,5 @@
 # 方案 B：直接使用 CI 预构建产物
-# CI 验证后，构建产物位于 dist/ 目录，本 Dockerfile 仅负责打包运行
+# CI 验证后，构建产物位于 apps/web/.next/ 目录，本 Dockerfile 仅负责打包运行
 #
 # 构建方式:
 #   podman build --target web -t xingye-web .
@@ -9,9 +9,7 @@ WORKDIR /app/web
 ENV NODE_ENV=production
 
 # 复制 CI 预构建产物（构建产物位于 dist/web/ 目录）
-COPY dist/web/.next/standalone ./
-COPY dist/web/.next/static ./.next/static
-COPY dist/web/public ./public
+COPY dist/web/ ./
 
 EXPOSE 3000
 CMD ["node", "server.js"]

@@ -18,12 +18,12 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# ========== 自动发现 dist 中的应用 ==========
+# ========== 自动发现 dist 中的构建产物 ==========
 discover_apps() {
     local apps=()
     if [ -d "$PROJECT_ROOT/dist" ]; then
         for dir in "$PROJECT_ROOT/dist"/*/; do
-            if [ -d "$dir/.next/standalone" ]; then
+            if [ -f "$dir/server.js" ]; then
                 apps+=("$(basename "$dir")")
             fi
         done
@@ -47,7 +47,7 @@ main() {
     if [ $# -eq 0 ]; then
         APPS=$(discover_apps)
         if [ -z "$APPS" ]; then
-            echo "错误: 未在 dist/ 目录中找到任何构建产物"
+            echo "错误: 未在 apps/ 目录中找到任何构建产物"
             echo "请先运行: ./scripts/ci-validate.sh"
             exit 1
         fi
@@ -83,9 +83,7 @@ main() {
 FROM node:20-alpine AS $app
 WORKDIR /app/$app
 ENV NODE_ENV=production
-COPY dist/$app/.next/standalone ./
-COPY dist/$app/.next/static ./.next/static
-COPY dist/$app/public ./public
+COPY dist/$app/ ./
 EXPOSE 3000
 CMD ["node", "server.js"]
 EOF

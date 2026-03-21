@@ -32,11 +32,17 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 日志函数
+# 终端+文件双输出（用于主流程）
 log() { echo -e "[$(date '+%H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
 success() { log "${GREEN}[SUCCESS] $1${NC}"; }
 error() { log "${RED}[ERROR] $1${NC}"; }
 info() { log "${BLUE}[INFO] $1${NC}"; }
 warn() { log "${YELLOW}[WARN] $1${NC}"; }
+
+# 仅文件输出（用于已被重定向的函数内部，避免重复）
+log_file() { echo -e "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"; }
+success_file() { log_file "${GREEN}[SUCCESS] $1${NC}"; }
+info_file() { log_file "${BLUE}[INFO] $1${NC}"; }
 
 # 错误处理
 error_exit() {
@@ -46,19 +52,17 @@ error_exit() {
     exit 1
 }
 
-# 收集容器日志
+# 收集服务容器日志（注意：validator 容器日志已通过 podman logs -f 实时写入，此处不再重复收集）
 collect_logs() {
-    info "收集容器日志..."
-    {
-        echo "=== Validator 容器日志 ==="
-        podman logs xingye-ci-validator 2>&1 || echo "无法获取 validator 日志"
-        echo ""
-        echo "=== Redis 容器日志 ==="
-        podman logs xingye-ci-redis 2>&1 || echo "无法获取 redis 日志"
-        echo ""
-        echo "=== PostgreSQL 容器日志 ==="
-        podman logs xingye-ci-postgres 2>&1 || echo "无法获取 postgres 日志"
-    } >> "$LOG_FILE" 2>&1
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 收集服务容器日志...${NC}"
+    echo "=== Redis 容器日志 ==="
+    podman logs xingye-ci-redis 2>&1 || echo "无法获取 redis 日志"
+    echo "=== END ==="
+    echo ""
+    echo "=== PostgreSQL 容器日志 ==="
+    podman logs xingye-ci-postgres 2>&1 || echo "无法获取 postgres 日志"
+    echo "=== END ==="
+    echo ""
 }
 
 # 日志管理：仅保留最近的5个日志文件
@@ -77,55 +81,56 @@ manage_logs() {
 
 # 强制销毁 CI 容器（确保资源释放）
 destroy_ci_containers() {
-    info "强制销毁 CI 容器..."
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 强制销毁 CI 容器...${NC}"
 
     # 首先停止所有正在运行的 CI 容器（防止服务容器持续运行）
     local containers=("xingye-ci-validator" "xingye-ci-redis" "xingye-ci-postgres")
     for container in "${containers[@]}"; do
         if podman ps -q -f "name=$container" | grep -q .; then
-            info "  停止运行中的容器: $container"
+            echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   停止运行中的容器: $container${NC}"
             podman stop "$container" 2>/dev/null || true
         fi
     done
 
     # 停止并删除 compose 管理的容器
     cd "$PROJECT_ROOT"
-    podman-compose -f podman-compose.ci.yml down -v --remove-orphans 2>/dev/null || true
-
+    podman-compose -f podman-compose.ci.yml down -v --remove-orphans >/dev/null 2>&1 || true
+    
     # 强制删除可能残留的容器
     for container in "${containers[@]}"; do
         if podman ps -a -q -f "name=$container" | grep -q .; then
-            info "  销毁容器: $container"
+            echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   销毁容器: $container${NC}"
             podman rm -f "$container" 2>/dev/null || true
         fi
     done
 
     # 清理未使用的网络
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   清理网络: $container${NC}"
     podman network rm xingye-monorepo_ci-network 2>/dev/null || true
     podman network rm ci-network 2>/dev/null || true
 
-    success "CI 容器已销毁，系统资源已释放"
+    echo -e "[$(date '+%H:%M:%S')] ${GREEN}[SUCCESS] CI 容器已销毁，系统资源已释放${NC}"
 }
 
 # 清理函数
 cleanup() {
     if [ "$SKIP_CLEANUP" = "--skip-cleanup" ]; then
-        warn "跳过清理（调试模式）"
+        echo -e "[$(date '+%H:%M:%S')] ${YELLOW}[WARN] 跳过清理（调试模式）${NC}"
         return
     fi
 
-    info "清理验证环境..."
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 清理验证环境...${NC}"
     destroy_ci_containers
-    info "清理完成"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 清理完成${NC}"
 }
 
 # 验证构建产物（卷挂载已自动同步产物到宿主机）
 verify_build_artifacts() {
-    info "验证构建产物..."
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 验证构建产物...${NC}"
 
     # 检查 dist 目录是否存在
     if [ ! -d "$PROJECT_ROOT/dist" ]; then
-        error "构建产物目录不存在: $PROJECT_ROOT/dist"
+        echo -e "[$(date '+%H:%M:%S')] ${RED}[ERROR] 构建产物目录不存在: $PROJECT_ROOT/dist${NC}"
         return 1
     fi
 
@@ -134,15 +139,16 @@ verify_build_artifacts() {
     app_count=$(find "$PROJECT_ROOT/dist" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
 
     if [ "$app_count" -eq 0 ]; then
-        error "未找到任何应用构建产物"
+        echo -e "[$(date '+%H:%M:%S')] ${RED}[ERROR] 未找到任何应用构建产物${NC}"
         return 1
     fi
 
-    success "发现 $app_count 个应用构建产物"
-    info "构建产物内容:"
+    echo -e "[$(date '+%H:%M:%S')] ${GREEN}[SUCCESS] 发现 $app_count 个应用构建产物${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 构建产物内容:${NC}"
     ls -la "$PROJECT_ROOT/dist/" 2>/dev/null | tail -n +2 | while read line; do
-        info "  $line"
+        echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   $line${NC}"
     done || true
+    echo ""
 }
 
 # 主流程

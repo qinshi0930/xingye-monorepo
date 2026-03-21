@@ -14,7 +14,8 @@ describe('Redis Cache Operations', () => {
     // 清理所有测试缓存
     await cache.clear('test:*');
     // 关闭Redis连接并清理全局引用，确保Jest能够正常退出
-    await closeRedis();
+    // 使用 force=true 强制关闭，避免 ioredis 内部重连定时器导致 Jest 挂起
+    await closeRedis(true);
   });
 
   describe('Basic Operations', () => {

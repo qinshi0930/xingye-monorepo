@@ -3,22 +3,17 @@ version: '3.8'
 services:
   # Web 主应用
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
-      args:
-        APP_NAME: web
-    image: xingye-web:latest
+    image: xingye-web:${IMAGE_VERSION:-latest}  # 通过环境变量指定版本，默认 latest
     container_name: xingye-web
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     env_file:
       - .env
       - apps/web/.env.local
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
@@ -34,13 +29,7 @@ services:
 
   # Admin 管理后台 (预留)
   # admin:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #     target: admin
-  #     args:
-  #       APP_NAME: admin
-  #   image: xingye-admin:latest
+  #   image: xingye-admin:${IMAGE_VERSION:-latest}
   #   container_name: xingye-admin
   #   expose:
   #     - "3000"
@@ -59,13 +48,7 @@ services:
 
   # API 服务 (预留)
   # api:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #     target: api
-  #     args:
-  #       APP_NAME: api
-  #   image: xingye-api:latest
+  #   image: xingye-api:${IMAGE_VERSION:-latest}
   #   container_name: xingye-api
   #   expose:
   #     - "3000"
