@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-  distDir: '../../dist/web/.next',
+  distDir: '.next',
 
   // ========== 图片域名配置 ==========
   images: {

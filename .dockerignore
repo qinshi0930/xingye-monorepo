@@ -56,10 +56,10 @@ apps/*/.env.local
 **/eslint.config.*
 
 # typescript config (build后不需要)
-**/tsconfig.json
+# **/tsconfig.json
 
-# local build output (CI 构建产物需要被复制到镜像)
-# dist/  # 注释掉，允许 Dockerfile 复制 CI 预构建产物
+# local build output (现在使用多阶段构建，不需要复制 dist)
+dist/
 
 # logs
 logs/

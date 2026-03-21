@@ -1,8 +1,7 @@
 #!/bin/bash
-# 多应用构建脚本 - 使用 CI 预构建产物打包镜像
-# 前置条件: 必须先运行 ./scripts/ci-validate.sh 生成 dist/ 产物
+# 多应用构建脚本 - 纯镜像模式（Dockerfile 多阶段构建）
 # 用法:
-#   ./scripts/build-apps.sh              # 自动发现 dist/ 中所有应用并构建
+#   ./scripts/build-apps.sh              # 构建默认应用(web)
 #   ./scripts/build-apps.sh web admin    # 构建指定应用
 
 set -e
@@ -18,12 +17,12 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# ========== 自动发现 dist 中的应用 ==========
+# ========== 自动发现 dist 中的构建产物 ==========
 discover_apps() {
     local apps=()
     if [ -d "$PROJECT_ROOT/dist" ]; then
         for dir in "$PROJECT_ROOT/dist"/*/; do
-            if [ -d "$dir/.next/standalone" ]; then
+            if [ -f "$dir/server.js" ]; then
                 apps+=("$(basename "$dir")")
             fi
         done
@@ -43,15 +42,11 @@ check_dockerfile_target() {
 
 # ========== 主流程 ==========
 main() {
-    # 模式判断: 无参数时自动发现所有应用，有参数时构建指定应用
+    # 模式判断: 无参数时构建默认应用(web)，有参数时构建指定应用
     if [ $# -eq 0 ]; then
-        APPS=$(discover_apps)
-        if [ -z "$APPS" ]; then
-            echo "错误: 未在 dist/ 目录中找到任何构建产物"
-            echo "请先运行: ./scripts/ci-validate.sh"
-            exit 1
-        fi
-        echo "自动发现应用: $APPS"
+        # 纯镜像模式: 默认构建 web 应用
+        APPS="web"
+        echo "纯镜像模式: 构建默认应用 $APPS"
     else
         APPS="$@"
         echo "构建指定应用: $APPS"
@@ -83,9 +78,7 @@ main() {
 FROM node:20-alpine AS $app
 WORKDIR /app/$app
 ENV NODE_ENV=production
-COPY dist/$app/.next/standalone ./
-COPY dist/$app/.next/static ./.next/static
-COPY dist/$app/public ./public
+COPY dist/$app/ ./
 EXPOSE 3000
 CMD ["node", "server.js"]
 EOF
