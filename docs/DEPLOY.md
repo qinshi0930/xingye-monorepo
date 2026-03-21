@@ -25,11 +25,11 @@
 
 | 文件 | 作用 | 注意事项 |
 |------|------|----------|
-| `Dockerfile` | 生产镜像构建 | 使用 CI 预构建产物 |
+| `Dockerfile` | 生产镜像构建 | 多阶段构建 + pnpm deploy |
 | `podman-compose.yml` | 生产编排 | 包含 Nginx + App 服务 |
 | `podman-compose.infra.yml` | 基础设施编排 | PostgreSQL + Redis |
 | `podman-compose.ci.yml` | CI 验证环境 | 完整 CI 流程容器化 |
-| `deploy.sh` | 自动化部署 | 复用 CI 产物，支持回滚 |
+| `deploy.sh` | 自动化部署 | 纯镜像模式，支持回滚 |
 | `ci-validate.sh` | CI 验证脚本 | lint + type-check + test + build |
 | `config/nginx/` | Nginx 配置 | 生产环境反向代理配置 |
 
@@ -76,15 +76,13 @@ podman-compose -f /var/www/xingye-monorepo/podman-compose.yml ps
 
 ### 3.2 部署步骤（deploy.sh）
 
-1. **CI 验证** - 调用 `ci-validate.sh` (lint + type-check + test + build)
-2. **检查构建产物** - 验证 `dist/.next/standalone` 存在
-3. **构建生产镜像** - `podman build` (使用 CI 预构建产物)
-4. **备份当前部署** - `tar czf`
-5. **复制到部署路径** - `cp` (dist/, config/, .env 等)
-6. **停止旧容器** - `podman-compose down`
-7. **启动新容器** - `podman-compose up -d`
-8. **健康检查** - PostgreSQL + Redis + HTTP
-9. **清理临时资源**
+1. **构建生产镜像** - `podman build` (Dockerfile 多阶段构建)
+2. **备份当前部署** - 备份配置和数据卷
+3. **复制配置文件** - `cp` (config/, .env 等，纯镜像模式不复制构建产物)
+4. **停止旧容器** - `podman-compose down`
+5. **启动新容器** - `podman-compose up -d`
+6. **健康检查** - PostgreSQL + Redis + HTTP
+7. **清理临时资源**
 
 ### 3.3 CI 验证流程（ci-validate.sh）
 
@@ -107,8 +105,9 @@ pnpm validate
 4. 运行单元测试
 5. 运行构建
 6. 运行集成测试
-7. 导出构建产物到 `dist/` 目录
-8. 清理 CI 容器
+7. 清理 CI 容器
+
+> **注意**: 纯镜像模式下，CI 验证与部署解耦。CI 负责验证代码质量，部署时通过 Dockerfile 重新构建镜像。
 
 **日志位置：** `logs/ci/validate-YYYYMMDD-HHMMSS.log`
 
@@ -252,26 +251,26 @@ location / {
 
 ## 8. 架构演进
 
-### 8.1 方案 B：CI 产物复用模式
+### 8.1 纯镜像模式（当前架构）
 
-当前部署架构采用"方案 B"设计：
+当前部署架构采用"纯镜像模式"设计：
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   CI 验证阶段    │────▶│   产物导出      │────▶│   部署阶段      │
-│  ci-validate.sh │     │   dist/         │     │  deploy.sh      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                                              │
-        ▼                                              ▼
-  - lint                                          检查产物
-  - type-check                                    构建镜像
-  - test                                          备份/部署
-  - build                                         健康检查
+┌─────────────────┐     ┌─────────────────┐
+│   CI 验证阶段    │     │   部署阶段      │
+│  ci-validate.sh │     │  deploy.sh      │
+└─────────────────┘     └─────────────────┘
+        │                       │
+        ▼                       ▼
+  - lint                    构建镜像
+  - type-check              备份/部署
+  - test                    健康检查
+  - build
   - integration
 ```
 
 **优势：**
-- 构建一次，部署多次
-- 验证与部署职责分离
-- 部署流程更快（跳过构建）
-- 生产环境使用与验证环境一致的产物
+- 彻底解决 pnpm 软链接在容器中失效的问题
+- CI 与部署完全解耦，职责清晰
+- 无需管理构建产物，简化流程
+- 使用 `pnpm deploy` 生成独立可部署包
