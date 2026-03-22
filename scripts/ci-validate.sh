@@ -128,11 +128,10 @@ cleanup() {
 # 验证 CI 镜像构建结果（封闭环境模式，无需验证宿主机产物）
 verify_ci_build() {
     echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] CI 镜像构建完成${NC}"
-    echo -e "[$(date '+%H:%M:%S')] ${GREEN}[SUCCESS] Dockerfile ci target 构建成功${NC}"
     echo ""
-    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 说明: 封闭环境模式下，验证步骤在镜像构建时已完成${NC}"
-    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]       - lint、type-check、test:unit、build 在 Dockerfile 中执行${NC}"
-    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]       - 集成测试在 compose 中运行${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 验证步骤说明:${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   - 步骤 1-4 (lint/type-check/test:unit/build) 在镜像构建时执行${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   - 步骤 5 (test:integration) 在容器中运行${NC}"
     echo ""
 }
 
@@ -156,8 +155,26 @@ main() {
     # 2. 日志管理（仅保留最近5个日志文件）
     manage_logs
 
-    # 3. 启动验证
-    info "[验证] 启动验证容器..."
+    # 3. 构建 CI 镜像（捕获前4步的构建日志）
+    info "[构建] 构建 CI 验证镜像..."
+    info "       执行步骤: lint → type-check → test:unit → build"
+    echo ""
+    echo "=== [1/5] 代码检查 (lint) ===" >> "$LOG_FILE"
+    echo "=== [2/5] 类型检查 (type-check) ===" >> "$LOG_FILE"
+    echo "=== [3/5] 单元测试 (test:unit) ===" >> "$LOG_FILE"
+    echo "=== [4/5] 构建应用 (build) ===" >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+    
+    # 构建 ci target 并将输出同时显示在终端和写入日志
+    if ! podman build --target ci -t localhost/xingye-ci-validator:latest -f "$PROJECT_ROOT/Dockerfile" "$PROJECT_ROOT" 2>&1 | tee -a "$LOG_FILE"; then
+        error_exit "CI 镜像构建失败（lint/type-check/test:unit/build 步骤出错）"
+    fi
+    
+    success "Dockerfile ci target 构建成功"
+    echo "" >> "$LOG_FILE"
+    
+    # 4. 启动验证（仅运行集成测试）
+    info "[验证] 启动验证容器运行集成测试..."
     echo ""
 
     # 在后台启动 compose（服务容器持续运行，validator 执行验证后退出）
@@ -184,7 +201,7 @@ main() {
         EXIT_CODE=1
     fi
 
-    # 4. 验证 CI 构建结果（封闭环境模式）
+    # 5. 验证 CI 构建结果（封闭环境模式）
     if [ $EXIT_CODE -eq 0 ]; then
         verify_ci_build 2>&1 | tee -a "$LOG_FILE" || true
     fi
