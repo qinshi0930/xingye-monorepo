@@ -412,17 +412,19 @@ curl -fsSL .../install.sh | bash -s -- my-project --skip-git
 脚本会自动：
 - 检查 `.env` 文件是否存在
 - 生成随机的 `REDIS_PASSWORD` 和 `POSTGRES_PASSWORD`
-- 根据 PostgreSQL 配置自动生成 `DATABASE_URL`
-- 密码更新时会自动重新生成 DATABASE_URL
+
+**注意**: `DATABASE_URL` 由应用代码在容器中自动拼接，无需手动配置。如需覆盖，可在 `.env` 中设置完整的连接字符串。
 
 ### 8.3 环境变量
 
 开发环境 (.env):
 ```bash
 # 数据库
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
+# DATABASE_URL 由应用代码自动拼接，通常无需手动配置
+# 如需覆盖，可设置完整的连接字符串:
+# DATABASE_URL=postgresql://user:pass@localhost:5432/mydb?sslmode=disable
 
-# 或分散配置
+# 或分散配置（推荐，应用会自动拼接）
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=user

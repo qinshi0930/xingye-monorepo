@@ -27,8 +27,8 @@
 .
 ├── apps/
 │   ├── web/              # Web 主应用 (Next.js)
-│   ├── admin/            # 管理后台 (预留)
-│   └── api/              # API 服务 (预留)
+│   ├── admin/            # 管理后台 (基础配置已就绪，需自行实现业务逻辑)
+│   └── api/              # API 服务 (基础配置已就绪，需自行实现业务逻辑)
 ├── packages/
 │   ├── config-eslint/    # ESLint 共享配置
 │   ├── config-typescript/# TypeScript 共享配置

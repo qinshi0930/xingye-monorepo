@@ -152,6 +152,7 @@ podman exec xingye-nginx nslookup web
 podman-compose -f podman-compose.yml config
 
 # 查看 CI 容器日志
+# 注意: 如果通过 install.sh 安装脚本初始化项目，容器名会被替换为 ${PROJECT_NAME}-ci-*
 podman logs xingye-ci-validator
 podman logs xingye-ci-postgres
 podman logs xingye-ci-redis
