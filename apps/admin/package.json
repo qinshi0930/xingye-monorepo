@@ -1,0 +1,28 @@
+{
+  "name": "admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf .next",
+    "dev": "rimraf .next && next dev -p 3001",
+    "build": "rimraf .next && next build",
+    "start": "next start -p 3001",
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@xingye/config-eslint": "workspace:*",
+    "@xingye/config-typescript": "workspace:*",
+    "eslint": "^9",
+    "rimraf": "^5.0.0",
+    "typescript": "^5"
+  }
+}

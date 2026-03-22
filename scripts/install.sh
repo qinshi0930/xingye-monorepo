@@ -169,6 +169,13 @@ if [[ -f "scripts/deploy.sh" ]]; then
     sed -i.bak "s/xingye-postgres/$PROJECT_NAME-postgres/g" scripts/deploy.sh && rm -f scripts/deploy.sh.bak
 fi
 
+if [[ -f "scripts/ci-validate.sh" ]]; then
+    sed -i.bak "s/xingye-ci-validator/$PROJECT_NAME-ci-validator/g" scripts/ci-validate.sh && rm -f scripts/ci-validate.sh.bak
+    sed -i.bak "s/xingye-ci-redis/$PROJECT_NAME-ci-redis/g" scripts/ci-validate.sh && rm -f scripts/ci-validate.sh.bak
+    sed -i.bak "s/xingye-ci-postgres/$PROJECT_NAME-ci-postgres/g" scripts/ci-validate.sh && rm -f scripts/ci-validate.sh.bak
+    sed -i.bak "s/xingye-monorepo_ci-network/${PROJECT_NAME}_ci-network/g" scripts/ci-validate.sh && rm -f scripts/ci-validate.sh.bak
+fi
+
 # 生成环境变量
 log "生成环境变量..."
 if [[ -f ".env.example" ]]; then
