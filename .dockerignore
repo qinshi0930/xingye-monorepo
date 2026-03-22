@@ -44,16 +44,16 @@ apps/*/.env.local
 # drizzle
 **/drizzle/
 
-# test files
-**/*.test.ts
-**/*.test.tsx
-**/*.spec.ts
-**/*.spec.tsx
-**/jest.config.*
-**/jest.setup.*
+# test files (CI 验证需要，保留测试文件)
+# **/*.test.ts
+# **/*.test.tsx
+# **/*.spec.ts
+# **/*.spec.tsx
+# **/jest.config.*
+# **/jest.setup.*
 
-# eslint config
-**/eslint.config.*
+# eslint config (CI 验证需要，保留根目录配置)
+# **/eslint.config.*
 
 # typescript config (build后不需要)
 # **/tsconfig.json

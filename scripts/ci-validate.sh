@@ -1,16 +1,17 @@
 #!/bin/bash
 #
-# CI 验证脚本 - 部署前全面验证
+# CI 验证脚本 - 部署前全面验证（封闭多阶段构建模式）
 # ========================================
 # 功能：
-# - 代码检查 (lint)
-# - 类型检查 (type-check)
-# - 单元测试
-# - 构建应用
-# - 集成测试
-# - 导出构建产物到 dist/ 目录
+# - 代码检查 (lint) - 在 Dockerfile ci target 中执行
+# - 类型检查 (type-check) - 在 Dockerfile ci target 中执行
+# - 单元测试 - 在 Dockerfile ci target 中执行
+# - 构建应用 - 在 Dockerfile ci target 中执行
+# - 集成测试 - 在 compose 中运行，连接数据库和 Redis
 #
 # 特性：
+# - 使用 Dockerfile 多阶段构建，与部署流程保持一致
+# - 封闭环境，不依赖宿主机文件系统（无卷挂载）
 # - 验证结束后自动销毁 CI 容器，释放系统资源
 # - 支持 --skip-cleanup 参数保留容器用于调试
 #
@@ -124,30 +125,14 @@ cleanup() {
     echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 清理完成${NC}"
 }
 
-# 验证构建产物（卷挂载已自动同步产物到宿主机）
-verify_build_artifacts() {
-    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 验证构建产物...${NC}"
-
-    # 检查 dist 目录是否存在
-    if [ ! -d "$PROJECT_ROOT/dist" ]; then
-        echo -e "[$(date '+%H:%M:%S')] ${RED}[ERROR] 构建产物目录不存在: $PROJECT_ROOT/dist${NC}"
-        return 1
-    fi
-
-    # 检查是否有任何应用产物
-    local app_count
-    app_count=$(find "$PROJECT_ROOT/dist" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
-
-    if [ "$app_count" -eq 0 ]; then
-        echo -e "[$(date '+%H:%M:%S')] ${RED}[ERROR] 未找到任何应用构建产物${NC}"
-        return 1
-    fi
-
-    echo -e "[$(date '+%H:%M:%S')] ${GREEN}[SUCCESS] 发现 $app_count 个应用构建产物${NC}"
-    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 构建产物内容:${NC}"
-    ls -la "$PROJECT_ROOT/dist/" 2>/dev/null | tail -n +2 | while read line; do
-        echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]   $line${NC}"
-    done || true
+# 验证 CI 镜像构建结果（封闭环境模式，无需验证宿主机产物）
+verify_ci_build() {
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] CI 镜像构建完成${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${GREEN}[SUCCESS] Dockerfile ci target 构建成功${NC}"
+    echo ""
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO] 说明: 封闭环境模式下，验证步骤在镜像构建时已完成${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]       - lint、type-check、test:unit、build 在 Dockerfile 中执行${NC}"
+    echo -e "[$(date '+%H:%M:%S')] ${BLUE}[INFO]       - 集成测试在 compose 中运行${NC}"
     echo ""
 }
 
@@ -199,9 +184,9 @@ main() {
         EXIT_CODE=1
     fi
 
-    # 4. 验证构建产物（卷挂载已自动同步产物到宿主机，仅需验证）
+    # 4. 验证 CI 构建结果（封闭环境模式）
     if [ $EXIT_CODE -eq 0 ]; then
-        verify_build_artifacts 2>&1 | tee -a "$LOG_FILE" || true
+        verify_ci_build 2>&1 | tee -a "$LOG_FILE" || true
     fi
 
     # 5. 收集日志
@@ -214,6 +199,9 @@ main() {
     echo ""
     if [ $EXIT_CODE -eq 0 ]; then
         success "验证通过，可以执行部署!"
+        echo ""
+        echo "说明: 封闭环境 CI 验证与部署流程一致"
+        echo "      部署时将重新构建生产镜像"
         echo ""
         echo "部署命令:"
         echo "  ./scripts/deploy.sh production"

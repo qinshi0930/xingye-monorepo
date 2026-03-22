@@ -1,14 +1,23 @@
 version: '3.8'
 
-# CI/验证环境 - 部署前全面验证
+# CI/验证环境 - 部署前全面验证（封闭多阶段构建模式）
 # 使用方式: podman-compose -f podman-compose.ci.yml up --abort-on-container-exit
+#
+# 架构说明:
+# - 使用 Dockerfile 多阶段构建，与部署流程保持一致
+# - 不再使用卷挂载源代码，真正的封闭环境
+# - CI 镜像包含 lint、type-check、test:unit、build 步骤
+# - 集成测试在此容器内运行，连接 postgres 和 redis 服务
 
 services:
-  # 验证容器
+  # 验证容器（使用 Dockerfile ci target 构建）
   validator:
-    image: node:20-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ci
+    image: localhost/xingye-ci-validator:latest
     container_name: xingye-ci-validator
-    working_dir: /app
     env_file:
       - .env
       - apps/web/.env.local
@@ -23,28 +32,16 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-xingye}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres123}
-      - POSTGRES_DB=${POSTGRES_DB:-master_db}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-xingye}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/${POSTGRES_DB:-master_db}?sslmode=disable
-    volumes:
-      - .:/app:Z
+      - POSTGRES_DB=${POSTGRES_DB:-xingye_test}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-xingye}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/${POSTGRES_DB:-xingye_test}?sslmode=disable
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    # 覆盖默认 CMD，运行集成测试
     command: >
-      sh -c "npm install -g pnpm &&
-             pnpm config set store-dir /tmp/pnpm-store &&
-             pnpm install --frozen-lockfile &&
-             echo '=== [1/6] 代码检查 (lint) ===' &&
-             pnpm lint &&
-             echo '=== [2/6] 类型检查 (type-check) ===' &&
-             pnpm type-check &&
-             echo '=== [3/6] 单元测试 ===' &&
-             pnpm test:unit &&
-             echo '=== [4/6] 构建 ===' &&
-             pnpm build &&
-             echo '=== [5/6] 集成测试 ===' &&
+      sh -c "echo '=== [5/5] 集成测试 ===' &&
              pnpm test:integration &&
              echo 'All checks passed!'"
     networks:
