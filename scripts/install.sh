@@ -158,9 +158,21 @@ sed -i.bak "s/\"name\": \"xingye-monorepo\"/\"name\": \"$PROJECT_NAME\"/" packag
 # 更新容器名称
 if [[ -f "podman-compose.yml" ]]; then
     sed -i.bak "s/xingye-monorepo/$PROJECT_NAME/g" podman-compose.yml && rm -f podman-compose.yml.bak
+    sed -i.bak "s/xingye-web/$PROJECT_NAME-web/g" podman-compose.yml && rm -f podman-compose.yml.bak
     sed -i.bak "s/xingye-redis/$PROJECT_NAME-redis/g" podman-compose.yml && rm -f podman-compose.yml.bak
     sed -i.bak "s/xingye-postgres/$PROJECT_NAME-postgres/g" podman-compose.yml && rm -f podman-compose.yml.bak
     sed -i.bak "s/xingye-nginx/$PROJECT_NAME-nginx/g" podman-compose.yml && rm -f podman-compose.yml.bak
+fi
+
+if [[ -f "podman-compose.ci.yml" ]]; then
+    sed -i.bak "s/xingye-ci-validator/$PROJECT_NAME-ci-validator/g" podman-compose.ci.yml && rm -f podman-compose.ci.yml.bak
+    sed -i.bak "s/xingye-ci-redis/$PROJECT_NAME-ci-redis/g" podman-compose.ci.yml && rm -f podman-compose.ci.yml.bak
+    sed -i.bak "s/xingye-ci-postgres/$PROJECT_NAME-ci-postgres/g" podman-compose.ci.yml && rm -f podman-compose.ci.yml.bak
+fi
+
+if [[ -f "podman-compose.infra.yml" ]]; then
+    sed -i.bak "s/xingye-infra-redis/$PROJECT_NAME-infra-redis/g" podman-compose.infra.yml && rm -f podman-compose.infra.yml.bak
+    sed -i.bak "s/xingye-infra-postgres/$PROJECT_NAME-infra-postgres/g" podman-compose.infra.yml && rm -f podman-compose.infra.yml.bak
 fi
 
 if [[ -f "scripts/deploy.sh" ]]; then
